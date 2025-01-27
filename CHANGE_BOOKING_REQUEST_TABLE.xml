@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<variforms xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="schemas/Variforms.xsd">
+    <actions>
+        <!--
+        These are the most common used actions. Please verify needs and edit accordingly.
+        -->
+        <action id="view">view</action>
+        <action id="create">create</action>
+        <action id="update">update</action>
+        <action id="delete">delete</action>
+        <action id="query">query</action>
+    </actions>
+    <table id="CUSTOM_CHANGE_BOOKING_REQUEST" defaultSearchfieldId="customEntityFields.customcbrBooking">
+        <title>Change Booking Request</title>
+        <customization creationType="CUSTOM_NEW"/>
+        <entity>
+            <name>com.portsamerica.navis.core.CustomChangeBookingRequest</name>
+            <primaryKey>customEntityGkey</primaryKey>
+        </entity>
+        <tableActions>
+            <tableActionMode action="create" mode="allow"/>
+            <tableActionMode action="update" mode="allow"/>
+            <tableActionMode action="view" mode="allow"/>
+            <tableActionMode action="delete" mode="allow"/>
+        </tableActions>
+         <attributes>
+             <attribute key="masterRefFieldId" value="customEntityFields.customcbrBooking" />
+         </attributes>
+        <column fieldId="customEntityFields.customcbrGkey"/>
+        <column fieldId="customEntityFields.customcbrCbrNbr"/>
+        <column fieldId="customEntityFields.customcbrSourceBooking"/>
+        <column fieldId="customEntityFields.customcbrDestinationBooking"/>
+        <column fieldId="customEntityFields.customcbrSourceVesselVisit"/>
+        <column fieldId="customEntityFields.customcbrDestinationVesselVisit"/>
+        <column fieldId="customEntityFields.customcbrOperator"/>
+        <column fieldId="customEntityFields.customcbrPod"/>
+        <column fieldId="customEntityFields.customcbrOperationType"/>
+        <column fieldId="customEntityFields.customcbrStatus"/>
+        <column fieldId="customEntityFields.customcbrRemarks"/>
+        <column fieldId="customEntityFields.customcbrCreator" display="viewable"/>
+        <column fieldId="customEntityFields.customcbrCreated" display="viewable"/>
+        <column fieldId="customEntityFields.customcbrModifier" display="viewable"/>
+        <column fieldId="customEntityFields.customcbrModified" display="viewable"/>
+    </table>
+</variforms>
+

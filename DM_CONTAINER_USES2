@@ -1,0 +1,401 @@
+SELECT
+      master.vsl_cd || '~' || master.call_year || '~' || master.call_seq || '~' || master.cntr_no gkey,
+      'X' active_sparcs,
+      'CTR' eq_class,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL THEN 'T'    -- converted to THROUGH by migrator
+          WHEN master.bl_no = 'DOMESTIC' THEN 'D'    -- converted to DOMESTIC by migrator
+          WHEN master.ix_cd = 'I' THEN    'I'        -- converted to IMPORT by migrator
+          WHEN master.ix_cd = 'V' THEN    'M'        -- converted to STORAGE by migrator
+          WHEN master.ix_cd = 'X' THEN    'E'
+          ELSE NULL
+      END category,
+      master.cntr_no equipment_id,
+      master.fe status,
+      -- eu.eqsz_id equipment_length,
+      -- eu.eqtp_id equipment_type,
+      -- eu.eqht_id equipment_height,
+      DECODE(master.sztp2, '', master.sztp, master.sztp2) iso_code,
+  	CASE
+  		WHEN cntr.ptnr_code IS NOT NULL THEN cntr.ptnr_code
+  		WHEN cntr.owner IS NOT NULL THEN cntr.owner
+  		WHEN master.ptnr_code IS NOT NULL THEN master.ptnr_code
+  		WHEN master.owner IS NOT NULL THEN master.owner
+  		ELSE 'UNK'
+  	END owner_id,
+    CASE
+        WHEN master.cntr_state = 'Y' THEN 'Y'
+        WHEN master.cntr_state IN ('O','G') THEN
+            CASE
+                WHEN master.ix_cd = 'I' THEN
+                    CASE
+                        WHEN master.TRANS_TYPE2 = 'R' OR master.dispatch_mode2 = 'RO' THEN 'R'
+                        ELSE 'T'
+                    END
+                WHEN master.ix_cd ='X' THEN
+                    CASE
+                        WHEN master.TRANS_TYPE = 'R' or master.dispatch_mode = 'RI' THEN 'R'
+                        ELSE 'T'
+                    END
+                WHEN master.ix_cd ='V' THEN
+                    CASE
+                        WHEN master.TRANS_TYPE2 IS NULL AND master.dispatch_mode2 IS NULL THEN
+                            CASE
+                                WHEN master.TRANS_TYPE = 'R' OR master.dispatch_mode = 'RI' THEN 'R'
+                                ELSE 'T'
+                            END
+                        WHEN master.TRANS_TYPE2 IS NULL AND master.dispatch_mode2 = 'RO' THEN 'R'
+                        WHEN master.TRANS_TYPE2 = 'R' THEN 'R'
+                        ELSE 'T'
+                    END
+            END
+        WHEN master.cntr_state IN ('M','R','B') THEN 'V'
+        ELSE NULL
+    END loc_type,
+
+      CASE
+          WHEN berthPlan.out_voy IS NOT NULL THEN master.vsl_cd || REGEXP_REPLACE(berthPlan.out_voy, '[^0-9A-Za-z]', '')
+  		WHEN prevBerthPlan.out_voy IS NOT NULL THEN master.prev_vsl || REGEXP_REPLACE(prevBerthPlan.out_voy, '[^0-9A-Za-z]', '')
+          WHEN berthPlan.in_voy IS NOT NULL THEN master.vsl_cd || berthPlan.in_voy
+          ELSE NULL
+      END vessel_visit_id,
+      NULL arr_loc_type,      -- copied from in_loc_type in migrator
+      NULL arr_loc_id,        -- copied from in_loc_id in migrator
+      NULL arr_pos_id,        -- copied from in_pos_id in migrator
+      NULL arr_visit_id,      -- copied from in_visit_id in migrator
+      -- eu.ARR_CALL_NBR,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'X' THEN            -- export
+                  'V'
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'I') THEN    -- van pool (storage) or import
+                  master.trans_type2
+          ELSE NULL
+      END dep_loc_type,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'X' THEN            -- export
+                  master.vsl_cd
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'I') THEN    -- van pool (storage) or import
+                  CASE master.trans_type2
+                      WHEN 'T' THEN outGateTran.truck_lp_number
+                      WHEN 'V' THEN master.vsl_cd
+                      WHEN 'R' THEN r.car_no
+                      ELSE NULL
+                  END
+          ELSE NULL
+      END dep_loc_id,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'X' THEN            -- export
+                  master.s_bay || master.s_row || master.s_tier
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'I') THEN    -- van pool (storage) or import
+                  CASE master.trans_type2
+                      WHEN 'T' THEN NULL -- R also null which is default
+                      WHEN 'V' THEN master.s_bay || master.s_row || master.s_tier
+                      ELSE NULL
+                  END
+          ELSE NULL
+      END dep_pos_id,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'X' THEN            -- export
+                  REGEXP_REPLACE(berthPlan.out_voy, '[^0-9A-Za-z]', '')
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'I') THEN    -- van pool (storage) or import
+                  CASE master.trans_type2
+                      WHEN 'T' THEN inGateTran.gpass_no
+                      WHEN 'R' THEN master.TRAIN_ID
+                      WHEN 'V' THEN DECODE(berthPlan.out_voy, '', REGEXP_REPLACE(prevBerthPlan.out_voy, '[^0-9A-Za-z]', ''), REGEXP_REPLACE(berthPlan.out_voy, '[^0-9A-Za-z]', ''))
+                      ELSE NULL
+                  END
+          ELSE NULL
+      END dep_visit_id,
+      -- eu.DEP_CALL_NBR,
+      smaster.ov_aft oog_back_cm,
+      smaster.ov_fore oog_front_cm,
+      smaster.ov_port oog_left_cm,
+      smaster.ov_stbd oog_right_cm,
+      smaster.ov_height oog_top_cm,
+      master.grs_wgt gross_weight,
+      'LB' gross_units,
+      chassis.chassis_no chassis_number,
+      -- ebook.bundled_on_nbr,
+      DECODE(genset.genset_no, 'NONE', '', genset.genset_no) accessory_number,
+      -- eu.storage,
+      -- eu.commodity_code,
+      master.cmdt_desc commodity_description,
+      -- eu.haz_class,
+  	CASE
+  		WHEN master.set_temp IS NULL THEN NULL
+  		WHEN UPPER(SUBSTR(master.set_temp, -1, 1)) = 'C' THEN
+  			TO_NUMBER(SUBSTR(master.set_temp, 1, LENGTH(master.set_temp) - 1))
+  		WHEN UPPER(SUBSTR(master.set_temp, -1, 1)) = 'F' THEN
+  			(TO_NUMBER(SUBSTR(master.set_temp, 1, LENGTH(master.set_temp) - 1)) - 32) * 5 / 9
+  		ELSE NULL
+  	END temp_required_c,
+  	CASE
+  		WHEN book.booking_no IS NOT NULL THEN
+  			DECODE(book.vent, 'CLD', 'CLOS', NVL(book.vent, book.air_qty))
+  		ELSE NULL
+  	END vent_required,
+  	CASE
+  		WHEN book.booking_no IS NOT NULL THEN
+  			DECODE(book.vent, 'CLD', '', '', book.air_qty_unit, '%')
+  		ELSE NULL
+  	END vent_units,
+      -- eu.consignee,
+      -- eu.shipper,
+      master.por origin,
+      master.fdest destination,
+      master.pol pol,
+      master.pod pod1,
+      master.fpod pod2,
+      -- eu.block_id,
+      master.grp_code group_code_id,
+      -- eu.shand_id special_handling,
+  	NULL note,			-- *** goes into ufvSparcsNote
+  	CASE
+  		WHEN master.service_code = '20' THEN 'R'	-- converted to RETURN by migrator
+  		WHEN master.dispatch_mode = 'IF' THEN 'I'	-- converted to DRAYIN by migrator
+  		ELSE NULL
+  	END dray_status,
+      master.seal_no seal_nbr1,
+      NULL seal_nbr2,
+      NULL seal_nbr3,
+      NULL seal_nbr4,
+  	CASE
+  		WHEN master.ix_cd = 'I' THEN master.trucker
+  		ELSE NULL
+  	END dray_trkc_id,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'I' THEN            -- import
+                  'V'
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'X') THEN    -- van pool (storage) or export
+  				CASE
+  					WHEN master.trans_type IS NOT NULL THEN master.trans_type
+  					WHEN master.dispatch_mode IN ('EX','EI') THEN 'T'
+  					WHEN master.dispatch_mode ='RI' THEN 'R'
+  					WHEN master.dispatch_mode IN ('DS','IF') THEN 'V'
+  					ELSE NULL
+                  END
+          ELSE NULL
+      END in_loc_type,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'I' THEN            -- import
+                  master.vsl_cd
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'X') THEN    -- van pool (storage) or export
+                  CASE
+                      WHEN master.trans_type = 'T' OR
+  						 master.dispatch_mode IN ('EX','EI') THEN
+  							DECODE(inGateTran.truck_lp_number, '', 'TRUCK', inGateTran.truck_lp_number)
+  					  WHEN master.trans_type = 'R' OR
+                             master.dispatch_mode IN ('RI') THEN
+                             DECODE(r.car_no, '', 'TRAIN', r.car_no)
+                      WHEN master.trans_type = 'V' OR
+  						 master.dispatch_mode IN ('DS','IF') THEN
+  							DECODE(master.vsl_cd, 'EMTY', master.prev_vsl, master.vsl_cd)
+  					ELSE NULL
+                  END
+          ELSE NULL
+      END in_loc_id,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'I' THEN			-- import
+                  master.s_bay || master.s_row || master.s_tier
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'X') THEN    -- van pool (storage) or export
+                  CASE
+                      WHEN master.trans_type = 'T' OR
+  						 master.dispatch_mode IN ('EX','EI') THEN NULL -- R also null which is default
+                      WHEN master.trans_type = 'V' OR
+  						 master.dispatch_mode IN ('DS','IF') THEN
+  							master.s_bay || master.s_row || master.s_tier
+  					ELSE NULL
+                  END
+          ELSE NULL
+      END in_pos_id,
+      CASE
+          WHEN thru.staff_cd IS NOT NULL OR       -- through
+               master.ix_cd = 'I' THEN            -- import
+                  berthPlan.out_voy
+          WHEN master.bl_no = 'DOMESTIC' OR       -- domestic
+               master.ix_cd IN ('V', 'X') THEN    -- van pool (storage) or export
+                  CASE
+                      WHEN master.trans_type = 'T' OR
+  						 master.dispatch_mode IN ('EX','EI') THEN
+  							DECODE(inGateTran.gpass_no, '', 'MIGRATION', inGateTran.gpass_no)
+  					  WHEN master.trans_type = 'R' OR
+                        	master.dispatch_mode IN ('RI') THEN
+                        	DECODE(r.train_id, '', 'WBIN'||substr(r.in_date,0,8), r.train_id)
+                      WHEN master.trans_type = 'V' OR
+  						 master.dispatch_mode IN ('DS','IF') THEN
+  							DECODE(berthPlan.out_voy, '', REGEXP_REPLACE(prevBerthPlan.out_voy, '[^0-9A-Za-z]', ''), REGEXP_REPLACE(berthPlan.out_voy, '[^0-9A-Za-z]', ''))
+  					ELSE NULL
+                  END
+          ELSE NULL
+      END in_visit_id,
+      -- eu.in_call_nbr,
+      RPAD(master.in_date,14,'0') in_time,
+      RPAD(master.out_date,14,'0') out_time,
+      NULL out_loc_type,
+      NULL out_loc_id,
+      NULL out_pos_id,
+      NULL out_visit_id,
+      -- eu.out_call_nbr,
+  	CASE
+  		WHEN (master.in_date IS NOT NULL) AND (RPAD(master.in_date,14,'0') < creation.create_date) THEN
+  			RPAD(master.in_date,14,'0')
+  		ELSE creation.create_date
+  	END created,
+      'MIGRATION' creator,
+  	NULL changed,
+      -- eu.changer,
+      -- eu.shipping_mode,
+      master.remark remarks,        	-- goes into unitRemark
+      -- eu.export_release_nbr,
+      -- eu.customs_level,
+      -- eu.rehandle_reason,
+      -- eu.on_power,
+      CASE
+          WHEN master.cntr_state = 'Y' THEN (SELECT tmnl_cd FROM MTAMS.tb_tmnl)
+          WHEN master.cntr_state IN ('O','G') THEN 'TRUCK'
+          WHEN master.cntr_state IN ('M','R','B') THEN master.vsl_cd
+          ELSE NULL
+      END loc_id,  -- not used in migrator
+      CASE
+          WHEN master.cntr_state = 'Y' THEN
+              CASE
+                  WHEN master.area IS NOT NULL THEN
+                      master.area
+                  ELSE
+                      master.block || master.bay || master.roww || '.' || master.tier
+              END
+          --WHEN master.cntr_state IN ('O','G') THEN 'TIP'
+          WHEN master.cntr_state IN ('O','G') THEN
+                      CASE
+                          WHEN master.ix_cd = 'I' THEN
+                              CASE
+                                  WHEN master.TRANS_TYPE2 = 'R' OR master.dispatch_mode2 = 'RO' THEN NVL(r.car_no, 'TRAIN')
+                                  ELSE 'T'
+                              END
+                          WHEN master.ix_cd ='X' THEN
+                              CASE
+                                  WHEN master.TRANS_TYPE = 'R' or master.dispatch_mode = 'RI' THEN NVL(r.car_no, 'TRAIN')
+                                  ELSE 'T'
+                              END
+                          WHEN master.ix_cd ='V' THEN
+                              CASE
+                                  WHEN master.TRANS_TYPE2 IS NULL AND master.dispatch_mode2 IS NULL THEN
+                                      CASE
+                                          WHEN master.TRANS_TYPE = 'R' OR master.dispatch_mode = 'RI' THEN NVL(r.car_no, 'TRAIN')
+                                          ELSE 'T'
+                                      END
+                                  WHEN master.TRANS_TYPE2 IS NULL AND master.dispatch_mode2 = 'RO' THEN NVL(r.car_no, 'TRAIN')
+                                  WHEN master.TRANS_TYPE2 = 'R' THEN 'R'
+                                  ELSE 'T'
+                              END
+                      END
+
+          WHEN master.cntr_state IN ('M','R','B') THEN master.s_bay || master.s_row || master.s_tier
+          ELSE NULL
+      END pos_id,
+      CASE
+          WHEN master.booking_no IS NOT NULL THEN master.booking_no
+          WHEN master.job_odr_no IS NOT NULL THEN master.job_odr_no
+          ELSE null
+      END eqo_nbr,
+      -- eu.eqo_gkey eqo_gkey,
+      CASE
+          WHEN book.ptnr_code IS NOT NULL THEN book.ptnr_code
+          WHEN ebook.ptnr_code IS NOT NULL THEN ebook.ptnr_code
+          ELSE null
+      END eqo_line_id,
+      CASE
+          WHEN master.booking_no IS NOT NULL THEN 'BOOK'
+          WHEN master.job_odr_no IS NOT NULL THEN 'EDO'
+          ELSE null
+      END eqo_sub_type,
+  	NULL customer,							-- goes into ufvGuaranteeParty
+  	NULL port_gtd,							-- goes into ufvGuaranteeThruDay
+      RPAD(master.dem_date,14,'0') port_lfd,	-- goes into ufvLastFreeDay
+  	NULL port_ptd,							-- goes into ufvPaidThruDay
+      -- eu.verified_gross_weight,
+      -- eu.verified_gross_units,
+      master.tare_wgt tare_weight,
+      'LB' tare_units,
+      sztp.max_gwgt safe_weight,
+      'LB' safe_units,
+  	master.dmg_cond damaged,
+      master.handle_instr shand_id,
+  	master.bl_no,
+  	master.service_code
+      -- w.WAYBILL_NUMBER,
+      -- w.PIN_NBR WAYBILL_PIN,
+      -- W.WAYBILL_DATE,
+      -- w.SHIPPER_CODE WAYBILL_SHIPPER,
+      -- w.CONSIGNEE_CODE WAYBILL_CONSIGNEE,
+      -- w.SGT_417_PHONE
+  FROM MTAMS.tb_master master
+      LEFT JOIN MTAMS.tb_booking book ON book.vsl_cd = master.vsl_cd AND book.call_year = master.call_year AND book.call_seq = master.call_seq AND book.booking_no = master.booking_no AND book.adjustment <> 'D'
+      LEFT JOIN MTAMS.tb_ebook ebook ON ebook.book_type = 'C' AND ebook.job_odr_no = master.job_odr_no AND ebook.adjustment <> 'D'
+      LEFT JOIN MTAMS.tb_sztp sztp ON sztp.sztp2 = master.sztp2
+      LEFT JOIN MTAMS.tb_smaster smaster ON smaster.vsl_cd = master.vsl_cd AND smaster.call_year = master.call_year AND smaster.call_seq = master.call_seq AND smaster.cntr_no = master.cntr_no AND smaster.cntr_seq = master.cntr_seq
+      LEFT JOIN MTAMS.tb_berthplan berthPlan ON berthPlan.vsl_cd = master.vsl_cd AND berthPlan.call_year = master.call_year AND berthPlan.call_seq = master.call_seq
+  	LEFT JOIN MTAMS.tb_berthplan prevBerthPlan ON prevBerthPlan.vsl_cd = master.prev_vsl AND prevBerthPlan.call_year = master.prev_year AND prevBerthPlan.call_seq = master.prev_seq
+      LEFT JOIN MTAMS.tb_thru thru ON thru.vsl_cd = master.vsl_cd AND thru.call_year = master.call_year AND thru.call_seq = master.call_seq AND thru.cntr_no = master.cntr_no
+      -- LEFT JOIN MTAMS.tb_transshipment ts ON tsztp.vsl_cd = master.vsl_cd AND tsztp.call_year = master.call_year AND tsztp.call_seq = master.call_seq AND tsztp.cntr_no = master.cntr_no
+      LEFT JOIN MTAMS.tb_gate_tran inGateTran ON inGateTran.eir_no = master.in_reference
+      LEFT JOIN MTAMS.tb_gate_tran outGateTran ON outGateTran.eir_no = master.out_reference
+  	LEFT JOIN MTAMS.tb_cntr cntr ON cntr.cntr_no = master.cntr_no
+  	LEFT JOIN MTAMS.tb_genset genset ON genset.genset_no = master.genset_no
+  	--train details
+  	LEFT JOIN
+
+  	(
+         SELECT dest_hub,in_date,train_id,car_no,rjob_type,cntr_no,booking_no,vsl_cd,call_year,call_seq
+         FROM MTAMS.bk_rail
+         UNION ALL
+         SELECT dest_hub,in_date,train_id,car_no,rjob_type,cntr_no,booking_no,vsl_cd,call_year,call_seq
+         FROM MTAMS.stc_bk_rail
+     )r ON master.cntr_no = r.cntr_no AND master.vsl_cd = r.vsl_cd AND master.call_year = r.call_year AND master.call_seq = r.call_seq
+
+
+  	LEFT JOIN
+  	(
+  		SELECT cntr_no, chassis_no
+  		FROM
+  		(
+  			SELECT cntr_no, chassis_no, ROW_NUMBER() OVER(PARTITION BY chassis_no ORDER BY update_time DESC) rn
+  			FROM
+  			(
+  				SELECT m.cntr_no, m.chassis_no, NVL(h1.update_time, h2.update_time) update_time
+  				FROM MTAMS.tb_master m
+  				LEFT JOIN MTAMS.tb_master_hist h1 ON h1.vsl_cd = m.vsl_cd AND h1.call_year = m.call_year AND h1.call_seq = m.call_seq AND h1.cntr_no = m.cntr_no AND h1.cntr_seq = m.cntr_seq AND h1.data_field = 'Chassis Number' AND h1.new_value = m.chassis_no
+  				LEFT JOIN MTAMS.tb_master_hist h2 ON h2.vsl_cd = m.vsl_cd AND h2.call_year = m.call_year AND h2.call_seq = m.call_seq AND h2.cntr_no = m.cntr_no AND h2.cntr_seq = m.cntr_seq AND h2.data_field = 'INSERT'
+                  WHERE m.cntr_seq = 0
+                  AND m.adjustment <> 'D'
+                  AND m.cntr_state <> 'D'
+                  AND m.out_date IS NULL
+  			)
+  		)
+  		WHERE rn = 1
+  	) chassis ON chassis.cntr_no = master.cntr_no
+  	LEFT JOIN
+  	(
+          SELECT vsl_cd, call_year, call_seq, cntr_no, cntr_seq, MAX(RPAD(update_time,14,'0')) AS create_date
+          FROM MTAMS.tb_master_hist
+          WHERE data_field = 'INSERT'
+          GROUP BY vsl_cd, call_year, call_seq, cntr_no, cntr_seq
+  	) creation ON creation.vsl_cd = master.vsl_cd AND creation.call_year = master.call_year AND creation.call_seq = master.call_seq AND creation.cntr_no = master.cntr_no AND creation.cntr_seq = master.cntr_seq
+  WHERE master.cntr_seq = '0'
+  AND master.adjustment <> 'D'
+  AND master.cntr_state <> 'D'
+  AND master.out_date IS NULL
